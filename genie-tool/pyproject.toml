@@ -3,7 +3,7 @@ name = "python"
 version = "0.1.0"
 description = "Genie Tools"
 readme = "README.md"
-requires-python = ">=3.11,<4.0"
+requires-python = ">=3.12,<=3.13"
 dependencies = [
     "aiosqlite>=0.21.0",
     "beautifulsoup4>=4.13.4",
@@ -24,3 +24,7 @@ dependencies = [
     "sse-starlette>=2.4.1",
     "uvicorn>=0.35.0",
 ]
+
+[[tool.uv.index]]
+url = "https://mirrors.aliyun.com/pypi/simple"
+

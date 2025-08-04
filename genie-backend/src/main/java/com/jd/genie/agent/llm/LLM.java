@@ -101,8 +101,8 @@ public class LLM {
                 multimodalContent.add(outerMap);
 
                 Map<String, Object> contentMap = new HashMap<>();
-                outerMap.put("type", "text");
-                outerMap.put("text", message.getContent());
+                contentMap.put("type", "text");
+                contentMap.put("text", message.getContent());
                 multimodalContent.add(contentMap);
 
                 messageMap.put("role", message.getRole().getValue());
@@ -584,6 +584,7 @@ public class LLM {
             client.newCall(request).enqueue(new Callback() {
                 @Override
                 public void onFailure(Call call, IOException e) {
+                    log.error("HTTP request failed: {}", e.getMessage(), e);
                     future.completeExceptionally(e);
                 }
 
@@ -620,9 +621,14 @@ public class LLM {
                     .build();
 
             String apiEndpoint = baseUrl + interfaceUrl;
+            
+            // 添加调试日志：打印实际发送的JSON内容
+            String jsonBody = objectMapper.writeValueAsString(params);
+            log.info("{} Sending JSON body: {}", context.getRequestId(), jsonBody);
+            
             RequestBody body = RequestBody.create(
                     MediaType.parse("application/json"),
-                    objectMapper.writeValueAsString(params)
+                    jsonBody
             );
             Request.Builder requestBuilder = new Request.Builder()
                     .url(apiEndpoint)
@@ -648,8 +654,17 @@ public class LLM {
                     boolean isContent = true;
                     try (ResponseBody responseBody = response.body()) {
                         if (!response.isSuccessful() || responseBody == null) {
-                            log.error("{} ask tool stream response error or empty", context.getRequestId());
-                            future.completeExceptionally(new IOException("Unexpected response code: " + response));
+                            String errorBody = "";
+                            try {
+                                if (responseBody != null) {
+                                    errorBody = responseBody.string();
+                                }
+                            } catch (Exception e) {
+                                log.warn("{} Failed to read error response body", context.getRequestId());
+                            }
+                            log.error("{} ask tool stream response error - Status: {}, Message: {}, Body: {}", 
+                                    context.getRequestId(), response.code(), response.message(), errorBody);
+                            future.completeExceptionally(new IOException("HTTP " + response.code() + ": " + response.message() + ", Body: " + errorBody));
                             return;
                         }
 
@@ -714,10 +729,16 @@ public class LLM {
                                                         currentToolCall.type = toolCall.type;
                                                     }
                                                     if (Objects.nonNull(toolCall.function)) {
+                                                        if (Objects.isNull(currentToolCall.function)) {
+                                                            currentToolCall.function = new OpenAIFunction();
+                                                        }
                                                         if (Objects.nonNull(toolCall.function.name)) {
-                                                            currentToolCall.function = toolCall.function;
+                                                            currentToolCall.function.name = toolCall.function.name;
                                                         }
                                                         if (Objects.nonNull(toolCall.function.arguments)) {
+                                                            if (Objects.isNull(currentToolCall.function.arguments)) {
+                                                                currentToolCall.function.arguments = "";
+                                                            }
                                                             currentToolCall.function.arguments += toolCall.function.arguments;
                                                         }
                                                     }
@@ -785,14 +806,14 @@ public class LLM {
                         future.complete(fullResponse);
 
                     } catch (Exception e) {
-                        log.error("{} ask tool stream error", context.getRequestId(), e);
+                        log.error("{} ask tool stream error: {}", context.getRequestId(), e.getMessage(), e);
                         future.completeExceptionally(e);
                     }
                 }
             });
 
         } catch (Exception e) {
-            log.error("{} ask tool stream error", context.getRequestId(), e);
+            log.error("{} ask tool stream error: {}", context.getRequestId(), e.getMessage(), e);
             future.completeExceptionally(e);
         }
 
